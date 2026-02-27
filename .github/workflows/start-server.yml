@@ -1,0 +1,128 @@
+name: Start Ephemeral Server
+
+# Trigger manually from the GitHub Actions UI (Actions → "Start Ephemeral Server" → Run workflow)
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: "How long to keep the server alive (minutes, max 60)"
+        required: false
+        default: "10"
+
+jobs:
+  serve:
+    name: Run WebSocket server via Cloudflare tunnel
+    runs-on: ubuntu-latest
+    timeout-minutes: 65   # hard cap — keep above maximum allowed duration_minutes
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Python environment
+      # -----------------------------------------------------------------------
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # -----------------------------------------------------------------------
+      # 3. Install cloudflared  (official .deb from GitHub Releases)
+      # -----------------------------------------------------------------------
+      - name: Install cloudflared
+        run: |
+          set -eux
+          CF_VERSION=$(curl -fsSL https://api.github.com/repos/cloudflare/cloudflared/releases/latest \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+          echo "cloudflared version: $CF_VERSION"
+          curl -fsSL \
+            "https://github.com/cloudflare/cloudflared/releases/download/${CF_VERSION}/cloudflared-linux-amd64.deb" \
+            -o /tmp/cloudflared.deb
+          sudo dpkg -i /tmp/cloudflared.deb
+          cloudflared --version
+
+      # -----------------------------------------------------------------------
+      # 4. Start uvicorn server in background
+      # -----------------------------------------------------------------------
+      - name: Start uvicorn server
+        run: |
+          nohup uvicorn server:app --host 127.0.0.1 --port 8765 \
+            > /tmp/uvicorn.log 2>&1 &
+          echo "Waiting for uvicorn to be ready …"
+          for i in $(seq 1 15); do
+            if curl -sf http://127.0.0.1:8765/ > /dev/null 2>&1; then
+              echo "uvicorn is up."
+              break
+            fi
+            sleep 1
+          done
+
+      # -----------------------------------------------------------------------
+      # 5. Start Cloudflare quick tunnel and extract public URL
+      # -----------------------------------------------------------------------
+      - name: Start Cloudflare tunnel and print public URL
+        run: |
+          nohup cloudflared tunnel --url http://127.0.0.1:8765 \
+            > /tmp/cf.log 2>&1 &
+          echo "Waiting for tunnel URL …"
+
+          PUBLIC_URL=""
+          for i in $(seq 1 40); do
+            sleep 3
+            # cloudflared writes a line like:
+            #   INF +----------------------------+
+            #   INF |  https://xxxx.trycloudflare.com  |
+            # Grab the https://... URL from the log
+            PUBLIC_URL=$(grep -oP 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' /tmp/cf.log | head -1)
+            if [ -n "$PUBLIC_URL" ]; then
+              break
+            fi
+          done
+
+          if [ -z "$PUBLIC_URL" ]; then
+            echo "ERROR: could not detect tunnel URL after waiting. Dumping cloudflared log:"
+            cat /tmp/cf.log
+            exit 1
+          fi
+
+          echo ""
+          echo "============================================================"
+          echo "  PUBLIC HTTP URL : $PUBLIC_URL"
+          echo "  PUBLIC WSS URL  : ${PUBLIC_URL/https:/wss:}/ws"
+          echo "  Health-check    : curl $PUBLIC_URL"
+          echo "  Client count    : curl $PUBLIC_URL/clients"
+          echo "============================================================"
+          echo ""
+
+      # -----------------------------------------------------------------------
+      # 6. Keep runner alive for the requested number of minutes
+      # -----------------------------------------------------------------------
+      - name: Keep server alive
+        run: |
+          DURATION="${{ github.event.inputs.duration_minutes }}"
+          # Clamp to [1, 60]
+          DURATION=$(( DURATION < 1 ? 1 : (DURATION > 60 ? 60 : DURATION) ))
+          SECONDS_LEFT=$(( DURATION * 60 ))
+          echo "Server will stay alive for ${DURATION} minute(s) (${SECONDS_LEFT}s)."
+          echo "Send Ctrl-C from the GitHub Actions UI (cancel the job) to stop early."
+          sleep "$SECONDS_LEFT"
+
+      # -----------------------------------------------------------------------
+      # 7. Show server logs on completion (useful for debugging)
+      # -----------------------------------------------------------------------
+      - name: Dump server logs
+        if: always()
+        run: |
+          echo "=== uvicorn log ==="
+          cat /tmp/uvicorn.log || true
+          echo ""
+          echo "=== cloudflared log ==="
+          cat /tmp/cf.log || true

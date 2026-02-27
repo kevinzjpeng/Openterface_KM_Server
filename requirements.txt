@@ -1,0 +1,6 @@
+fastapi>=0.110.0fastapi>=0.110.0
+
+
+
+websockets>=12.0uvicorn[standard]>=0.29.0uvicorn[standard]>=0.29.0
+websockets>=12.0
