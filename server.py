@@ -47,8 +47,8 @@ _INDEX_HTML = Path(__file__).parent / "templates" / "index.html"
 # Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(message)s",
+    level=logging.DEBUG,
+    format="%(asctime)s  %(levelname)-8s  %(name)-20s  %(message)s",
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("keymod-server")
@@ -92,37 +92,85 @@ class RoleManager:
     # -- relay & broadcast -----------------------------------------------
     async def relay_to_agents(self, message: str) -> None:
         dead: list[WebSocket] = []
+        # Try to parse for better logging
+        try:
+            msg_obj = json.loads(message)
+            msg_preview = f"type={msg_obj.get('type')} data={str(msg_obj.get('data', ''))[:50]}"
+        except (json.JSONDecodeError, AttributeError):
+            msg_preview = message[:100]
+        
+        if not self._agents:
+            log.debug("No agents connected, message dropped: %s", msg_preview)
+            return
+        
         for agent in list(self._agents):
             try:
                 await agent.send_text(message)
-            except Exception:
+                log.debug("[→ AGENT] Sent: %s", msg_preview)
+            except Exception as e:
+                log.warning("Failed to send to agent: %s", e)
                 dead.append(agent)
         for d in dead:
             if d in self._agents:
                 self._agents.remove(d)
+        
+        if self._agents:
+            log.info("→ Relayed to %d agent(s): %s", len(self._agents), msg_preview)
 
     async def relay_to_agents_bytes(self, data: bytes) -> None:
         """Relay a raw binary (CH9329) frame to every connected agent."""
         dead: list[WebSocket] = []
+        # Parse CH9329 for better logging: [0x57][0xAB][addr][cmd][len]...
+        frame_info = f"{len(data)} bytes: {data.hex(' ')[:60]}..."
+        if len(data) >= 4 and data[0] == 0x57 and data[1] == 0xAB:
+            cmd = data[3] if len(data) > 3 else 0
+            cmd_names = {0x02: "KEYBOARD", 0x05: "MOUSE_REL", 0x06: "MOUSE_ABS"}
+            frame_info = f"CH9329 {cmd_names.get(cmd, f'CMD_0x{cmd:02X}')} - {len(data)} bytes"
+        
+        if not self._agents:
+            log.debug("No agents connected, binary frame dropped: %s", frame_info)
+            return
+        
         for agent in list(self._agents):
             try:
                 await agent.send_bytes(data)
-            except Exception:
+                log.debug("[→ AGENT] Sent binary: %s", frame_info)
+            except Exception as e:
+                log.warning("Failed to send binary to agent: %s", e)
                 dead.append(agent)
         for d in dead:
             if d in self._agents:
                 self._agents.remove(d)
+        
+        if self._agents:
+            log.info("→ Relayed binary to %d agent(s): %s", len(self._agents), frame_info)
 
     async def relay_to_controllers(self, message: str) -> None:
         dead: list[WebSocket] = []
+        # Try to parse for better logging
+        try:
+            msg_obj = json.loads(message)
+            msg_preview = f"type={msg_obj.get('type')}"
+        except (json.JSONDecodeError, AttributeError):
+            msg_preview = message[:100]
+        
+        if not self._controllers:
+            log.debug("No controllers connected, message dropped: %s", msg_preview)
+            return
+        
         for ctrl in list(self._controllers):
             try:
                 await ctrl.send_text(message)
-            except Exception:
+                log.debug("[← CTRL] Sent: %s", msg_preview)
+            except Exception as e:
+                log.warning("Failed to send to controller: %s", e)
                 dead.append(ctrl)
         for d in dead:
             if d in self._controllers:
                 self._controllers.remove(d)
+        
+        if self._controllers:
+            log.info("← Relayed to %d controller(s): %s", len(self._controllers), msg_preview)
 
     async def _broadcast_agent_status(self) -> None:
         msg = json.dumps({"type": "agent_status", "count": len(self._agents)})
@@ -199,11 +247,8 @@ async def controller_ws(ws: WebSocket) -> None:
             # ---- Binary frame: CH9329 protocol from KeyMod app ----------
             if message.get("bytes"):
                 raw_bytes: bytes = message["bytes"]
+                log.info("[← BROWSER] Received binary frame: %d bytes", len(raw_bytes))
                 await manager.relay_to_agents_bytes(raw_bytes)
-                log.info(
-                    "Relayed CH9329 binary frame (%d bytes) to %d agent(s)",
-                    len(raw_bytes), manager.agent_count,
-                )
                 continue
 
             # ---- Text frame: JSON from browser web terminal -------------
@@ -218,18 +263,21 @@ async def controller_ws(ws: WebSocket) -> None:
             msg_type = msg.get("type")
 
             if msg_type == "pong":
+                log.debug("[← BROWSER] Received pong")
                 continue  # browser replied to our keepalive – ignore
 
             if msg_type in ("key", "mouse_move", "mouse_click", "mouse_scroll"):
+                log.info("[← BROWSER] Received %s: %s", msg_type, json.dumps(msg.get('data', msg))[:80])
                 await manager.relay_to_agents(raw)
 
                 # Echo printable chars back to the browser terminal display
                 if msg_type == "key":
                     data = msg.get("data", "")
                     echo = json.dumps({"type": "echo", "data": data})
+                    log.debug("[→ BROWSER] Sending echo: %s", data[:20])
                     await ws.send_text(echo)
-
-                log.info("Relayed %s event to %d agent(s)", msg_type, manager.agent_count)
+            else:
+                log.debug("[← BROWSER] Received unknown type: %s", msg_type)
 
     except WebSocketDisconnect:
         await manager.disconnect_controller(ws)
@@ -247,7 +295,16 @@ async def agent_ws(ws: WebSocket) -> None:
             message = await ws.receive()
             # Relay any back-channel message (ack, error, etc.) to controllers
             if message.get("text"):
-                await manager.relay_to_controllers(message["text"])
+                raw_text = message["text"]
+                try:
+                    msg_obj = json.loads(raw_text)
+                    msg_type = msg_obj.get("type", "unknown")
+                    log.info("[← AGENT] Received back-channel: %s", msg_type)
+                except json.JSONDecodeError:
+                    log.info("[← AGENT] Received back-channel: %s", raw_text[:80])
+                await manager.relay_to_controllers(raw_text)
+            elif message.get("bytes"):
+                log.info("[← AGENT] Received binary back-channel: %d bytes", len(message["bytes"]))
     except WebSocketDisconnect:
         await manager.disconnect_agent(ws)
     except Exception as exc:

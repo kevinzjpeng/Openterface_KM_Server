@@ -18,6 +18,8 @@ Usage
 Press Ctrl-C to stop.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -82,7 +84,11 @@ MODIFIER_BITS: list[tuple[int, Key]] = [
 def _kc(ch: str) -> KeyCode:
     return KeyCode.from_char(ch)
 
-HID_KEY: dict[int, Key | KeyCode] = {
+def _k(name: str) -> Key | None:
+    """Return Key.<name> if it exists on this platform, else None (silently skipped)."""
+    return getattr(Key, name, None)
+
+_raw_hid: dict[int, Key | KeyCode | None] = {
     # a – z
     **{0x04 + i: _kc(chr(ord('a') + i)) for i in range(26)},
     # 1 – 9, 0
@@ -102,19 +108,21 @@ HID_KEY: dict[int, Key | KeyCode] = {
     0x3A: Key.f1,  0x3B: Key.f2,  0x3C: Key.f3,  0x3D: Key.f4,
     0x3E: Key.f5,  0x3F: Key.f6,  0x40: Key.f7,  0x41: Key.f8,
     0x42: Key.f9,  0x43: Key.f10, 0x44: Key.f11, 0x45: Key.f12,
-    # navigation cluster
-    0x49: Key.insert,   0x4A: Key.home,  0x4B: Key.page_up,
-    0x4C: Key.delete,   0x4D: Key.end,   0x4E: Key.page_down,
-    0x4F: Key.right,    0x50: Key.left,  0x51: Key.down,  0x52: Key.up,
+    # navigation cluster (insert/num_lock absent on macOS – skipped via _k())
+    0x49: _k('insert'),  0x4A: Key.home,     0x4B: Key.page_up,
+    0x4C: Key.delete,    0x4D: Key.end,      0x4E: Key.page_down,
+    0x4F: Key.right,     0x50: Key.left,     0x51: Key.down,  0x52: Key.up,
     # numpad
-    0x53: Key.num_lock,
+    0x53: _k('num_lock'),
     0x54: _kc('/'),  0x55: _kc('*'),  0x56: _kc('-'),  0x57: _kc('+'),
     0x58: Key.enter,
     0x59: Key.end,      0x5A: Key.down,  0x5B: Key.page_down,
     0x5C: Key.left,     0x5E: Key.right,
     0x5F: Key.home,     0x60: Key.up,    0x61: Key.page_up,
-    0x62: Key.insert,   0x63: Key.delete,
+    0x62: _k('insert'), 0x63: Key.delete,
 }
+# Strip entries whose key constant is unavailable on this platform
+HID_KEY: dict[int, Key | KeyCode] = {k: v for k, v in _raw_hid.items() if v is not None}
 
 # Mouse button bitmask (CH9329) → pynput Button
 MOUSE_BITS: list[tuple[int, Button]] = [
