@@ -28,6 +28,9 @@ import struct
 import subprocess
 import sys
 
+import base64
+import io
+
 import websockets
 from pynput.keyboard import Controller as KbController, Key, KeyCode
 from pynput.mouse import Controller as MouseController, Button
@@ -434,6 +437,47 @@ HOTKEY_MAP: dict[str, list] = {
 }
 
 
+async def capture_and_send_screenshot(ws) -> None:
+    """Capture the full screen and send it back as a base64 JPEG over the agent WS."""
+    try:
+        img = None
+        try:
+            import mss                                           # type: ignore
+            from PIL import Image                               # type: ignore
+            with mss.mss() as sct:
+                raw = sct.grab(sct.monitors[0])                 # all monitors combined
+                img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+        except ImportError:
+            from PIL import ImageGrab                           # type: ignore
+            img = ImageGrab.grab()
+
+        if img is None:
+            raise RuntimeError("No screenshot backend available")
+
+        # Downscale to max 1280 px wide to keep payload manageable
+        max_w = 1280
+        if img.width > max_w:
+            ratio = max_w / img.width
+            img = img.resize((max_w, int(img.height * ratio)), Image.LANCZOS)
+
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=60)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        await ws.send(json.dumps({
+            "type": "screenshot",
+            "data": f"data:image/jpeg;base64,{b64}",
+            "width": img.width,
+            "height": img.height,
+        }))
+        log.info("Screenshot sent (%d\u00d7%d, %.1f KB)", img.width, img.height, len(b64) * 0.75 / 1024)
+    except Exception as exc:
+        log.warning("Screenshot failed: %s", exc)
+        try:
+            await ws.send(json.dumps({"type": "screenshot_error", "error": str(exc)}))
+        except Exception:
+            pass
+
+
 def handle_hotkey(combo: str) -> None:
     keys = HOTKEY_MAP.get(combo.lower())
     if not keys:
@@ -541,7 +585,16 @@ async def run(server_url: str) -> None:
                         msg_id = None
                         if isinstance(message, str):
                             try:
-                                msg_id = json.loads(message).get("id")
+                                parsed = json.loads(message)
+                                msg_id = parsed.get("id")
+                                if parsed.get("type") == "screenshot_request":
+                                    await capture_and_send_screenshot(ws)
+                                    if msg_id:
+                                        try:
+                                            await ws.send(json.dumps({"type": "ack", "id": msg_id, "ok": True}))
+                                        except Exception:
+                                            pass
+                                    continue
                             except Exception:
                                 pass
                         dispatch(message)

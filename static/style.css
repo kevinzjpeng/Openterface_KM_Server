@@ -278,6 +278,55 @@ body {
 .os-pill:hover  { background: var(--surface2); color: var(--text); }
 .os-pill.active { background: var(--surface2); color: var(--blue); border-color: var(--blue); }
 
+/* Screenshot overlay */
+#screenshot-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 300;
+  align-items: center;
+  justify-content: center;
+}
+#screenshot-overlay.show { display: flex; }
+#screenshot-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  max-width: min(1280px, 96vw);
+  max-height: 92vh;
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
+#screenshot-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+#screenshot-body {
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+#screenshot-img {
+  max-width: 100%;
+  border-radius: 4px;
+  display: block;
+}
+#screenshot-spinner { color: var(--text-muted); }
+#screenshot-err { color: var(--accent); }
+
 /* send text */
 #text-input {
   flex: 1;

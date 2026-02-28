@@ -366,7 +366,7 @@ async def controller_ws(ws: WebSocket) -> None:
                 log.debug("[← BROWSER] Received pong")
                 continue  # browser replied to our keepalive – ignore
 
-            if msg_type in ("key", "mouse_move", "mouse_click", "mouse_scroll", "hotkey"):
+            if msg_type in ("key", "mouse_move", "mouse_click", "mouse_scroll", "hotkey", "screenshot_request"):
                 log.info("[← BROWSER] Received %s: %s", msg_type, json.dumps(msg.get('data', msg.get('combo', msg)))[:80])
                 await manager.relay_to_agents(raw)
 

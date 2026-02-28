@@ -154,6 +154,26 @@
           // Terminal mode: agent sends output back
           term.write(msg.data);
           incSent();
+        } else if (msg.type === 'screenshot') {
+          const overlay = document.getElementById('screenshot-overlay');
+          const img     = document.getElementById('screenshot-img');
+          const spinner = document.getElementById('screenshot-spinner');
+          const errDiv  = document.getElementById('screenshot-err');
+          const meta    = document.getElementById('screenshot-meta');
+          spinner.style.display = 'none';
+          errDiv.style.display  = 'none';
+          img.src = msg.data;
+          img.style.display = 'block';
+          meta.textContent = msg.width + '\u00d7' + msg.height;
+          overlay.classList.add('show');
+        } else if (msg.type === 'screenshot_error') {
+          const overlay = document.getElementById('screenshot-overlay');
+          const spinner = document.getElementById('screenshot-spinner');
+          const errDiv  = document.getElementById('screenshot-err');
+          spinner.style.display = 'none';
+          errDiv.textContent    = '\u26a0 ' + (msg.error || 'Screenshot failed');
+          errDiv.style.display  = 'block';
+          overlay.classList.add('show');
         }
       } catch (_) {}
     };
@@ -206,6 +226,26 @@
   };
 
   const helpOverlay = document.getElementById('help-overlay');
+  // Screenshot
+  const screenshotOverlay = document.getElementById('screenshot-overlay');
+  function openScreenshot() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const spinner = document.getElementById('screenshot-spinner');
+    const img     = document.getElementById('screenshot-img');
+    const errDiv  = document.getElementById('screenshot-err');
+    spinner.style.display = 'block';
+    img.style.display     = 'none';
+    errDiv.style.display  = 'none';
+    document.getElementById('screenshot-meta').textContent = '';
+    screenshotOverlay.classList.add('show');
+    ws.send(JSON.stringify({ type: 'screenshot_request' }));
+    incSent();
+  }
+  document.getElementById('btn-screenshot').onclick = openScreenshot;
+  document.getElementById('btn-screenshot-refresh').onclick = openScreenshot;
+  document.getElementById('btn-screenshot-close').onclick = () => { screenshotOverlay.classList.remove('show'); term.focus(); };
+  screenshotOverlay.addEventListener('click', (e) => { if (e.target === screenshotOverlay) { screenshotOverlay.classList.remove('show'); term.focus(); } });
+
   document.getElementById('btn-help').onclick      = () => { helpOverlay.classList.add('show'); };
   document.getElementById('btn-help-close').onclick = () => { helpOverlay.classList.remove('show'); term.focus(); };
   helpOverlay.addEventListener('click', (e) => { if (e.target === helpOverlay) { helpOverlay.classList.remove('show'); term.focus(); } });

@@ -49,6 +49,12 @@
       Clear
     </button>
 
+    <!-- screenshot -->
+    <button class="tb-btn" id="btn-screenshot" title="Request screenshot from target PC">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="3" width="14" height="11" rx="1.5"/><circle cx="8" cy="8.5" r="2.5"/><path d="M5 3 L5.8 1 L10.2 1 L11 3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Screen
+    </button>
+
     <!-- help -->
     <button class="tb-btn" id="btn-help" title="Help / shortcuts">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><path d="M6.5 6.5 Q8 4.5 9.5 6.5 Q8 8 8 9.5" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.7" fill="currentColor" stroke="none"/></svg>
@@ -200,6 +206,25 @@
     <div class="macro-editor-btns">
       <button class="btn-cancel" id="btn-macro-cancel">Cancel</button>
       <button class="btn-save" id="btn-macro-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCREENSHOT OVERLAY -->
+<div id="screenshot-overlay">
+  <div id="screenshot-panel">
+    <div id="screenshot-hdr">
+      <span>📷 Target Screen</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span id="screenshot-meta" style="font-size:10px;color:var(--text-muted)"></span>
+        <button class="tb-btn" id="btn-screenshot-refresh" title="Refresh">&#x21BB; Refresh</button>
+        <button class="tb-btn" id="btn-screenshot-close">&times;</button>
+      </div>
+    </div>
+    <div id="screenshot-body">
+      <div id="screenshot-spinner">Requesting screenshot…</div>
+      <img id="screenshot-img" alt="Target screen" style="display:none"/>
+      <div id="screenshot-err" style="display:none"></div>
     </div>
   </div>
 </div>

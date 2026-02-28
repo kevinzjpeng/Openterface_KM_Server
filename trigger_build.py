@@ -147,27 +147,32 @@ def watch_for_tunnel_url(repo: str, token: str, run_id: int, dispatched_at: str 
         # -- Poll .tunnel-url file --
         try:
             file_data  = _gh_get(file_url, token)
-            updated_at = file_data.get("commit", {}).get("committer", {}).get("date", "") or \
-                         file_data.get("last_modified", "")
             import base64 as _b64
             raw  = _b64.b64decode(file_data["content"]).decode().strip()
             m    = _TUNNEL_RE.search(raw)
             if m:
-                # Guard against a stale file from a previous run
-                # by checking the commit timestamp is >= dispatched_at
+                # Guard against a stale file from a previous run by checking
+                # that the commit timestamp is close to dispatched_at.
+                # Allow 90 s of clock skew between local machine and GitHub.
                 commit_date = ""
                 try:
-                    commit_url  = file_data.get("_links", {}).get("git", "")
-                    # Use the sha to get commit date via git/commits API
-                    file_sha    = file_data.get("sha", "")
                     commits_url = f"https://api.github.com/repos/{repo}/commits?path=.tunnel-url&per_page=1"
                     commits     = _gh_get(commits_url, token)
                     if commits:
                         commit_date = commits[0].get("commit", {}).get("committer", {}).get("date", "")[:19]
                 except Exception:
                     pass
-                if dispatched_at and commit_date and commit_date < dispatched_at[:19]:
-                    continue   # stale from previous run
+
+                # Build a threshold 90 s before dispatch to absorb clock skew
+                try:
+                    _dt = datetime.datetime.strptime(dispatched_at, "%Y-%m-%dT%H:%M:%S")
+                    stale_threshold = (_dt - datetime.timedelta(seconds=90)).strftime("%Y-%m-%dT%H:%M:%S")
+                except Exception:
+                    stale_threshold = dispatched_at
+
+                if dispatched_at and commit_date and commit_date < stale_threshold:
+                    print(f"  [skip] Stale URL in file (committed {commit_date}, dispatched {dispatched_at})")
+                    continue   # stale from a previous run
                 return m.group(0)
         except urllib.error.HTTPError as exc:
             if exc.code != 404:  # 404 = file not written yet
