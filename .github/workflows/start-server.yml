@@ -15,7 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 65
     permissions:
-      actions: write   # needed to write repo variables   # hard cap — keep above maximum allowed duration_minutes
+      contents: read  # needed for actions/checkout
+      actions: write  # needed to write repo variables   # hard cap — keep above maximum allowed duration_minutes
 
     steps:
       # -----------------------------------------------------------------------
