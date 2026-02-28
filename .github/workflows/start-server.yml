@@ -94,6 +94,7 @@ jobs:
           fi
 
           echo "$PUBLIC_URL" > /tmp/tunnel_url.txt
+          echo "::notice title=TunnelURL::$PUBLIC_URL"
           echo ""
           echo "============================================================"
           echo "  PUBLIC HTTP URL : $PUBLIC_URL"
