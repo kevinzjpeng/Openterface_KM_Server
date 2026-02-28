@@ -114,16 +114,6 @@ jobs:
 
 
       # -----------------------------------------------------------------------
-      # 5b. Upload tunnel URL as an artifact (enables API polling)
-      # -----------------------------------------------------------------------
-      - name: Upload tunnel URL as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tunnel-url
-          path: /tmp/tunnel_url.txt
-          retention-days: 1
-
-      # -----------------------------------------------------------------------
       # 6. Keep runner alive for the requested number of minutes
       # -----------------------------------------------------------------------
       - name: Keep server alive
