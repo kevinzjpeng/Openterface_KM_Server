@@ -256,12 +256,16 @@ body {
 .qkey:active { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
 
 /* OS selector pills (above System quick-key grid) */
+.sys-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sys-panel.hidden { display: none; }
 .os-selector {
   display: flex;
   gap: 4px;
-  margin-bottom: 5px;
 }
-.os-selector.hidden { display: none; }
 .os-pill {
   flex: 1;
   padding: 4px 2px;

@@ -429,7 +429,7 @@
 
   function renderSysTab() {
     const osSel = document.getElementById('os-selector');
-    const grid  = document.getElementById('qtab-sys');
+    const grid  = document.getElementById('qtab-sys-grid');
 
     // Rebuild OS selector pills
     osSel.innerHTML = '';
@@ -468,11 +468,9 @@
   document.querySelectorAll('.qtab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.qtab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.quick-grid').forEach(g => g.classList.add('hidden'));
+      document.querySelectorAll('.quick-grid, .sys-panel').forEach(g => g.classList.add('hidden'));
       tab.classList.add('active');
       document.getElementById('qtab-' + tab.dataset.tab).classList.remove('hidden');
-      const osSel = document.getElementById('os-selector');
-      if (osSel) osSel.classList.toggle('hidden', tab.dataset.tab !== 'sys');
     });
   });
 
