@@ -3,235 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>KeyMod \u2013 Remote Control</title>
+  <title>KeyMod – Remote Control</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css"/>
-  <style>
-    /* ---- reset / base ---- */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg:          #0d0f14;
-      --surface:     #141720;
-      --surface2:    #1c2030;
-      --border:      #252b3b;
-      --accent:      #e94560;
-      --accent-dim:  #7a1f30;
-      --green:       #3ddc84;
-      --green-dim:   #1a4a32;
-      --amber:       #ffb74d;
-      --amber-dim:   #4a3010;
-      --blue:        #5c9eff;
-      --text:        #c9d1e0;
-      --text-muted:  #5a6278;
-      --radius:      6px;
-    }
-    html, body { height: 100%; overflow: hidden; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-      font-size: 13px;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* ---- top bar ---- */
-    #topbar {
-      display: flex;
-      align-items: center;
-      gap: 0;
-      padding: 0 16px;
-      height: 48px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      user-select: none;
-    }
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-right: 20px;
-    }
-    .logo-icon {
-      width: 28px; height: 28px;
-      background: var(--accent);
-      border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 800; color: #fff;
-      letter-spacing: -1px;
-      flex-shrink: 0;
-    }
-    .logo-name {
-      font-size: 15px;
-      font-weight: 700;
-      color: #fff;
-      letter-spacing: 0.5px;
-    }
-    .logo-tag {
-      font-size: 10px;
-      color: var(--text-muted);
-      font-weight: 400;
-      margin-top: 1px;
-    }
-
-    /* ---- pill badges ---- */
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 11.5px;
-      font-weight: 600;
-      border: 1px solid transparent;
-      transition: background 0.25s, color 0.25s, border-color 0.25s;
-    }
-    .pill .dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    #server-pill {
-      background: var(--surface2);
-      border-color: var(--border);
-      color: var(--text-muted);
-      margin-right: 8px;
-    }
-    #server-pill.ok   { background: #0f2a1a; border-color: #1e5c35; color: var(--green); }
-    #server-pill.ok .dot   { background: var(--green); box-shadow: 0 0 6px var(--green); }
-    #server-pill.bad  { background: #2a0f14; border-color: #5c1f2a; color: var(--accent); }
-    #server-pill.bad .dot  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
-    #server-pill.wait .dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: pulse 1.2s infinite; }
-
-    #agent-pill {
-      background: var(--surface2);
-      border-color: var(--border);
-      color: var(--text-muted);
-    }
-    #agent-pill.active { background: #0f2a1a; border-color: #1e5c35; color: var(--green); }
-    #agent-pill.active .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
-    #agent-pill .dot { background: var(--text-muted); }
-
-    @keyframes pulse {
-      0%,100% { opacity: 1; } 50% { opacity: 0.3; }
-    }
-
-    /* ---- toolbar (right side of topbar) ---- */
-    .spacer { flex: 1; }
-    .toolbar {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .tb-btn {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 5px 10px;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 11.5px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-      white-space: nowrap;
-    }
-    .tb-btn:hover { background: var(--surface2); color: var(--text); border-color: #3a4258; }
-    .tb-btn.active { background: var(--surface2); color: var(--blue); border-color: var(--blue); }
-    .tb-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
-    .tb-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
-    #font-size-display {
-      min-width: 20px;
-      text-align: center;
-      font-variant-numeric: tabular-nums;
-      color: var(--text);
-    }
-
-    /* ---- status bar ---- */
-    #statusbar {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 0 14px;
-      height: 24px;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      flex-shrink: 0;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .sb-item { display: flex; align-items: center; gap: 5px; }
-    .sb-item span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
-    #sb-uptime, #sb-sent { font-variant-numeric: tabular-nums; }
-
-    /* ---- terminal wrapper ---- */
-    #terminal-wrap {
-      flex: 1;
-      overflow: hidden;
-      padding: 6px 6px 4px 6px;
-      display: flex;
-      flex-direction: column;
-    }
-    #terminal { flex: 1; overflow: hidden; border-radius: var(--radius); }
-    .xterm { height: 100%; }
-    .xterm-viewport { overflow-y: hidden !important; }
-
-    /* ---- help overlay ---- */
-    #help-overlay {
-      display: none;
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.65);
-      backdrop-filter: blur(4px);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-    }
-    #help-overlay.show { display: flex; }
-    #help-panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 24px 28px;
-      width: 440px;
-      max-width: 90vw;
-    }
-    #help-panel h2 {
-      font-size: 14px;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    #help-panel h2 button {
-      background: none; border: none; color: var(--text-muted);
-      cursor: pointer; font-size: 18px; line-height: 1;
-    }
-    #help-panel h2 button:hover { color: var(--text); }
-    .help-section { margin-bottom: 16px; }
-    .help-section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 8px; }
-    .help-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 5px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-    }
-    .help-row:last-child { border-bottom: none; }
-    .help-row span:first-child { color: var(--text-muted); }
-    kbd {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 4px; padding: 2px 6px; font-family: inherit;
-      font-size: 11px; color: var(--text);
-    }
-    .help-proto {
-      background: var(--surface2); border-radius: var(--radius); padding: 10px 12px;
-      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
-      font-size: 11.5px; line-height: 1.7; color: var(--blue);
-    }
-  </style>
+  <link rel="stylesheet" href="/static/style.css"/>
 </head>
 <body>
 
@@ -286,6 +60,85 @@
 <!-- TERMINAL -->
 <div id="terminal-wrap">
   <div id="terminal"></div>
+
+  <!-- INPUT PANEL -->
+  <div id="input-panel">
+
+    <!-- 1: Quick Keys -->
+    <div class="panel-section" id="sec-qkeys">
+      <div class="panel-section-hdr" onclick="toggleSection('sec-qkeys')">
+        <button class="panel-toggle" tabindex="-1" aria-label="Toggle Quick Keys">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,6 8,10 12,6"/></svg>
+        </button>
+        Quick Keys
+      </div>
+      <div class="panel-body">
+        <div class="qtab-bar">
+          <button class="qtab active" data-tab="nav">Nav</button>
+          <button class="qtab" data-tab="edit">Edit</button>
+          <button class="qtab" data-tab="sys">System</button>
+        </div>
+        <div class="quick-grid" id="qtab-nav"></div>
+        <div class="quick-grid hidden" id="qtab-edit"></div>
+        <div class="quick-grid hidden" id="qtab-sys"></div>
+      </div>
+    </div>
+
+    <!-- 2: Send Text -->
+    <div class="panel-section grow" id="sec-send">
+      <div class="panel-section-hdr" onclick="toggleSection('sec-send')">
+        <button class="panel-toggle" tabindex="-1" aria-label="Toggle Send Text">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,6 8,10 12,6"/></svg>
+        </button>
+        Send Text
+        <div class="panel-actions" onclick="event.stopPropagation()">
+          <select id="tpl-select" title="Insert template"><option value="">Tpl…</option></select>
+          <button class="icon-btn" id="btn-mask" title="Enable password mask">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="8" cy="8" rx="5.5" ry="3.5"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <textarea id="text-input" placeholder="Type text… (Ctrl+Enter to send)" spellcheck="false"></textarea>
+        <input type="password" id="masked-input" placeholder="Password (hidden)…" autocomplete="new-password" style="display:none"/>
+        <button id="btn-send-text" title="Send text (Ctrl+Enter)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="2" y1="8" x2="12" y2="8" stroke-linecap="round"/><polyline points="8,4 12,8 8,12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Send
+        </button>
+      </div>
+    </div>
+
+    <!-- 3: History -->
+    <div class="panel-section hist-section" id="sec-hist">
+      <div class="panel-section-hdr" onclick="toggleSection('sec-hist')">
+        <button class="panel-toggle" tabindex="-1" aria-label="Toggle History">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,6 8,10 12,6"/></svg>
+        </button>
+        History
+        <span id="hist-count" style="color:var(--blue)"></span>
+      </div>
+      <div class="panel-body">
+        <div id="hist-list"><div id="hist-empty">No history yet</div></div>
+      </div>
+    </div>
+
+    <!-- 4: Macros -->
+    <div class="panel-section" id="sec-macros">
+      <div class="panel-section-hdr" onclick="toggleSection('sec-macros')">
+        <button class="panel-toggle" tabindex="-1" aria-label="Toggle Macros">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,6 8,10 12,6"/></svg>
+        </button>
+        Macros
+        <div class="panel-actions" onclick="event.stopPropagation()">
+          <button class="icon-btn" id="btn-macro-new" title="New macro">+ New</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="macro-list" id="macro-list"><div class="macro-empty">No macros yet</div></div>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <!-- STATUS BAR -->
@@ -302,9 +155,49 @@
     <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="10" height="8" rx="1"/><line x1="3" y1="7" x2="13" y2="7"/><line x1="7" y1="7" x2="7" y2="12"/></svg>
     Keyboard mode
   </div>
+  <div class="sb-item" id="sb-window" style="display:none;max-width:300px;overflow:hidden">
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="12" height="10" rx="1"/><line x1="2" y1="6" x2="14" y2="6"/><rect x="4" y="4" width="1.5" height="1.5" rx="0.3" fill="currentColor" stroke="none"/><rect x="6.5" y="4" width="1.5" height="1.5" rx="0.3" fill="currentColor" stroke="none"/></svg>
+    <span id="sb-window-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)"></span>
+  </div>
+  <div class="sb-item" id="sb-ack" style="display:none">
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,8 6,12 14,4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Delivered
+  </div>
+  <div class="sb-item" id="sb-session-wrap" style="display:none">
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><polyline points="8,4.5 8,8 11,9.5" stroke-linecap="round"/></svg>
+    Session: <span id="sb-session" class="ok">--:--</span>
+  </div>
   <div class="spacer"></div>
   <div class="sb-item" id="sb-reconnect" style="display:none;color:var(--amber)">
     Reconnecting\u2026
+  </div>
+</div>
+
+<!-- MACRO MODAL -->
+<div id="macro-overlay">
+  <div id="macro-editor">
+    <h2>
+      <span id="macro-modal-title">New Macro</span>
+      <button id="btn-macro-close">&times;</button>
+    </h2>
+    <div class="mfield">
+      <label>Name</label>
+      <input id="macro-name" type="text" placeholder="e.g. Open Terminal" autocomplete="off"/>
+    </div>
+    <div class="mfield">
+      <label>Steps</label>
+      <div id="msteps-list"></div>
+      <div class="msteps-add">
+        <button id="mstep-add-key">+ Key text</button>
+        <button id="mstep-add-hotkey">+ Hotkey</button>
+        <button id="mstep-add-wait">+ Wait ms</button>
+      </div>
+      <div class="mstep-hint">Key text tip: use <kbd>\r</kbd> for Enter, <kbd>\t</kbd> for Tab</div>
+    </div>
+    <div class="macro-editor-btns">
+      <button class="btn-cancel" id="btn-macro-cancel">Cancel</button>
+      <button class="btn-save" id="btn-macro-save">Save</button>
+    </div>
   </div>
 </div>
 
@@ -348,207 +241,9 @@
   </div>
 </div>
 
+
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
-<script>
-(() => {
-  /* ------------------------------------------------------------------ */
-  /* Terminal                                                             */
-  /* ------------------------------------------------------------------ */
-  let fontSize = 14;
-
-  const term = new Terminal({
-    cursorBlink: true,
-    fontSize,
-    fontFamily: "'Cascadia Code','Fira Code','Consolas',monospace",
-    scrollback: 5000,
-    theme: {
-      background:   '#0d0f14',
-      foreground:   '#c9d1e0',
-      cursor:       '#e94560',
-      cursorAccent: '#0d0f14',
-      selection:    '#2d3550',
-      black:        '#1c2030',
-      red:          '#e94560',
-      green:        '#3ddc84',
-      yellow:       '#ffb74d',
-      blue:         '#5c9eff',
-      magenta:      '#c084fc',
-      cyan:         '#22d3ee',
-      white:        '#c9d1e0',
-      brightBlack:  '#3d4560',
-      brightRed:    '#ff6b81',
-      brightGreen:  '#6ee7b7',
-      brightYellow: '#fde68a',
-      brightBlue:   '#93c5fd',
-      brightMagenta:'#d8b4fe',
-      brightCyan:   '#67e8f9',
-      brightWhite:  '#f1f5f9',
-    },
-  });
-
-  const fitAddon = new FitAddon.FitAddon();
-  term.loadAddon(fitAddon);
-  term.open(document.getElementById('terminal'));
-  fitAddon.fit();
-  window.addEventListener('resize', () => fitAddon.fit());
-
-  function setFontSize(n) {
-    fontSize = Math.min(24, Math.max(8, n));
-    term.options.fontSize = fontSize;
-    document.getElementById('font-size-display').textContent = fontSize;
-    fitAddon.fit();
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Stats                                                                */
-  /* ------------------------------------------------------------------ */
-  let sentCount  = 0;
-  let connectedAt = null;
-  let prevAgentCount = -1;   // -1 = unknown (fresh load)
-
-  setInterval(() => {
-    if (!connectedAt) return;
-    const s = Math.floor((Date.now() - connectedAt) / 1000);
-    const mm = String(Math.floor(s / 60)).padStart(2, '0');
-    const ss = String(s % 60).padStart(2, '0');
-    document.getElementById('sb-uptime').textContent = mm + ':' + ss;
-  }, 1000);
-
-  function incSent() {
-    sentCount++;
-    document.getElementById('sb-sent').textContent = sentCount;
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* WebSocket                                                            */
-  /* ------------------------------------------------------------------ */
-  const wsUrl = (location.protocol === 'https:' ? 'wss' : 'ws')
-                + '://' + location.host + '/ws';
-  let ws;
-  let reconnectTimer;
-
-  const serverPill  = document.getElementById('server-pill');
-  const serverLabel = document.getElementById('server-label');
-  const agentPill   = document.getElementById('agent-pill');
-  const agentLabel  = document.getElementById('agent-label');
-  const sbReconnect = document.getElementById('sb-reconnect');
-
-  function setServerStatus(state) {   // 'ok' | 'bad' | 'wait'
-    serverPill.className = 'pill ' + state;
-    sbReconnect.style.display = (state === 'bad') ? '' : 'none';
-    if (state === 'ok')   serverLabel.textContent = 'Connected';
-    if (state === 'bad')  serverLabel.textContent = 'Disconnected';
-    if (state === 'wait') serverLabel.textContent = 'Connecting\u2026';
-  }
-
-  function setAgentStatus(count) {
-    const active = count > 0;
-    agentPill.className = 'pill' + (active ? ' active' : '');
-    agentLabel.textContent = active ? 'Agent \u00d7' + count : 'No agent';
-
-    // only print banner on actual transitions, not on the initial status push
-    if (prevAgentCount !== -1) {
-      if (count > 0 && prevAgentCount === 0) {
-        banner('\r\n\x1b[1;32m  \u2714 Agent connected \u2013 keyboard control is live.\x1b[0m\r');
-      } else if (count === 0 && prevAgentCount > 0) {
-        banner('\r\n\x1b[1;33m  \u26a0 Agent disconnected.\x1b[0m\r');
-      }
-    }
-    prevAgentCount = count;
-  }
-
-  function banner(line) { term.writeln(line); }
-
-  function connect() {
-    setServerStatus('wait');
-    ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      connectedAt = Date.now();
-      prevAgentCount = -1;   // reset so next agent_status is treated as initial
-      setServerStatus('ok');
-      banner('\\r\\n\\x1b[1;32m \u250f\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2513\x1b[0m');
-      banner('\\x1b[1;32m \u2503  KeyMod \u2013 Remote KM Control        \u2503\x1b[0m');
-      banner('\\x1b[1;32m \u2517\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u251b\x1b[0m');
-      banner('\\x1b[90m  Server connected. Type to send keystrokes to the target PC.\\x1b[0m');
-      banner('\\x1b[90m  Press \\x1b[37mF1\\x1b[90m for help, \\x1b[37mCtrl+L\\x1b[90m to clear.\\x1b[0m\\r');
-    };
-
-    ws.onmessage = (evt) => {
-      if (typeof evt.data !== 'string') return;
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.type === 'ping') {
-          // reply to keepalive so the server knows we're still here
-          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type:'pong'}));
-          return;
-        }
-        if (msg.type === 'agent_status') {
-          setAgentStatus(msg.count);
-        } else if (msg.type === 'echo') {
-          term.write(msg.data);
-        } else if (msg.type === 'terminal_output') {
-          // Terminal mode: agent sends output back
-          term.write(msg.data);
-          incSent();
-        }
-      } catch (_) {}
-    };
-
-    ws.onclose = () => {
-      setServerStatus('bad');
-      connectedAt = null;
-      document.getElementById('sb-uptime').textContent = '\u2013\u2013:00';
-      setAgentStatus(0);
-      banner('\\r\\n\\x1b[1;31m  \u2716 Connection lost. Reconnecting in 5 s\u2026\\x1b[0m\\r');
-      clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, 5000);
-    };
-
-    ws.onerror = () => ws.close();
-  }
-
-  connect();
-
-  /* ------------------------------------------------------------------ */
-  /* Key input                                                            */
-  /* ------------------------------------------------------------------ */
-  term.onData((data) => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'key', data }));
-    incSent();
-  });
-
-  /* ------------------------------------------------------------------ */
-  /* Toolbar buttons                                                      */
-  /* ------------------------------------------------------------------ */
-  document.getElementById('btn-font-dec').onclick = () => setFontSize(fontSize - 1);
-  document.getElementById('btn-font-inc').onclick = () => setFontSize(fontSize + 1);
-
-  document.getElementById('btn-clear').onclick = () => {
-    term.clear();
-    term.focus();
-  };
-
-  const helpOverlay = document.getElementById('help-overlay');
-  document.getElementById('btn-help').onclick      = () => { helpOverlay.classList.add('show'); };
-  document.getElementById('btn-help-close').onclick = () => { helpOverlay.classList.remove('show'); term.focus(); };
-  helpOverlay.addEventListener('click', (e) => { if (e.target === helpOverlay) { helpOverlay.classList.remove('show'); term.focus(); } });
-
-  /* ------------------------------------------------------------------ */
-  /* Global keyboard shortcuts                                            */
-  /* ------------------------------------------------------------------ */
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'F1')  { e.preventDefault(); helpOverlay.classList.toggle('show'); }
-    if (e.ctrlKey && e.key === 'l') { e.preventDefault(); term.clear(); }
-    if (e.ctrlKey && (e.key === '=' || e.key === '+')) { e.preventDefault(); setFontSize(fontSize + 1); }
-    if (e.ctrlKey && e.key === '-') { e.preventDefault(); setFontSize(fontSize - 1); }
-  });
-
-  /* auto-focus terminal on load */
-  term.focus();
-})();
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

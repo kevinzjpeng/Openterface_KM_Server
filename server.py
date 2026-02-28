@@ -36,6 +36,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Load .env (silently ignored if the file doesn't exist)
@@ -50,6 +52,13 @@ load_dotenv()
 
 # Path to the web UI template (templates/index.html)
 _INDEX_HTML = Path(__file__).parent / "templates" / "index.html"
+
+# ---------------------------------------------------------------------------
+# Session lifetime tracking
+# ---------------------------------------------------------------------------
+SESSION_START: datetime = datetime.now(timezone.utc)
+SESSION_DURATION_MINUTES: int = max(1, min(60, int(os.getenv("SESSION_DURATION_MINUTES", "10"))))
+SESSION_EXPIRES: datetime = SESSION_START + timedelta(minutes=SESSION_DURATION_MINUTES)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -78,6 +87,16 @@ class RoleManager:
         self._controllers.append(ws)
         log.info("Controller connected  (total=%d)", len(self._controllers))
         await self._broadcast_agent_status()
+        # Push session timing so the browser can show a countdown
+        try:
+            await ws.send_text(json.dumps({
+                "type": "session_info",
+                "started_at": SESSION_START.isoformat(),
+                "expires_at": SESSION_EXPIRES.isoformat(),
+                "duration_minutes": SESSION_DURATION_MINUTES,
+            }))
+        except Exception:
+            pass
 
     async def disconnect_controller(self, ws: WebSocket) -> None:
         if ws in self._controllers:
@@ -226,6 +245,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -241,6 +263,18 @@ async def status() -> JSONResponse:
     return JSONResponse({
         "controllers": manager.controller_count,
         "agents": manager.agent_count,
+    })
+
+
+@app.get("/session-info")
+async def session_info() -> JSONResponse:
+    now = datetime.now(timezone.utc)
+    remaining_s = max(0, int((SESSION_EXPIRES - now).total_seconds()))
+    return JSONResponse({
+        "started_at": SESSION_START.isoformat(),
+        "expires_at": SESSION_EXPIRES.isoformat(),
+        "duration_minutes": SESSION_DURATION_MINUTES,
+        "remaining_seconds": remaining_s,
     })
 
 
@@ -332,8 +366,8 @@ async def controller_ws(ws: WebSocket) -> None:
                 log.debug("[← BROWSER] Received pong")
                 continue  # browser replied to our keepalive – ignore
 
-            if msg_type in ("key", "mouse_move", "mouse_click", "mouse_scroll"):
-                log.info("[← BROWSER] Received %s: %s", msg_type, json.dumps(msg.get('data', msg))[:80])
+            if msg_type in ("key", "mouse_move", "mouse_click", "mouse_scroll", "hotkey"):
+                log.info("[← BROWSER] Received %s: %s", msg_type, json.dumps(msg.get('data', msg.get('combo', msg)))[:80])
                 await manager.relay_to_agents(raw)
 
                 # Echo printable chars back to the browser terminal display

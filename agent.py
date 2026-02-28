@@ -23,7 +23,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import platform
 import struct
+import subprocess
 import sys
 
 import websockets
@@ -34,7 +36,7 @@ from pynput.mouse import Controller as MouseController, Button
 # Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
     datefmt="%H:%M:%S",
 )
@@ -148,8 +150,8 @@ ESCAPE_KEY_MAP: dict[str, Key] = {
     # Page Up / Down
     "\x1b[5~": Key.page_up,
     "\x1b[6~": Key.page_down,
-    # Insert / Delete
-    "\x1b[2~": Key.insert,
+    # Insert / Delete  (Key.insert not available on all platforms – skip safely)
+    **({"\x1b[2~": Key.insert} if hasattr(Key, "insert") else {}),
     "\x1b[3~": Key.delete,
     # Function keys
     "\x1bOP":   Key.f1,
@@ -399,6 +401,79 @@ def handle_mouse_scroll(x: int, y: int, dx: int, dy: int) -> None:
     log.debug("Mouse scroll (%d, %d) @ (%d, %d)", dx, dy, x, y)
 
 
+# ---------------------------------------------------------------------------
+# Hotkey combos (System tab quick-keys)
+# ---------------------------------------------------------------------------
+HOTKEY_MAP: dict[str, list] = {
+    "win":         [Key.cmd],
+    "win+d":       [Key.cmd, "d"],
+    "win+r":       [Key.cmd, "r"],
+    "win+l":       [Key.cmd, "l"],
+    "alt+f4":      [Key.alt, Key.f4],
+    "ctrl+alt+del":[Key.ctrl, Key.alt, Key.delete],
+}
+
+
+def handle_hotkey(combo: str) -> None:
+    keys = HOTKEY_MAP.get(combo.lower())
+    if not keys:
+        log.warning("Unknown hotkey combo: %r", combo)
+        return
+    try:
+        pressed = []
+        for k in keys:
+            keyboard.press(k)
+            pressed.append(k)
+        for k in reversed(pressed):
+            keyboard.release(k)
+        log.debug("Hotkey: %s", combo)
+    except Exception as exc:
+        log.warning("Hotkey error (%s): %s", combo, exc)
+
+
+# ---------------------------------------------------------------------------
+# Active window title (back-channel to browser)
+# ---------------------------------------------------------------------------
+def get_active_window_title() -> str:
+    """Return the title of the foreground window, or empty string on failure."""
+    system = platform.system()
+    try:
+        if system == "Windows":
+            import ctypes
+            hwnd = ctypes.windll.user32.GetForegroundWindow()
+            length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+            buf = ctypes.create_unicode_buffer(length + 1)
+            ctypes.windll.user32.GetWindowTextW(hwnd, buf, length + 1)
+            return buf.value
+        elif system == "Darwin":
+            script = 'tell application "System Events" to get name of first process whose frontmost is true'
+            result = subprocess.run(["osascript", "-e", script],
+                                    capture_output=True, text=True, timeout=2)
+            return result.stdout.strip()
+        else:  # Linux / X11
+            result = subprocess.run(
+                ["xdotool", "getactivewindow", "getwindowname"],
+                capture_output=True, text=True, timeout=2)
+            return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+async def window_title_task(ws: websockets.WebSocketClientProtocol) -> None:
+    """Poll the active window title every 3 s and push it to the server."""
+    last_title: str = ""
+    while True:
+        await asyncio.sleep(3)
+        title = get_active_window_title()
+        if title != last_title:
+            last_title = title
+            try:
+                await ws.send(json.dumps({"type": "window_title", "title": title}))
+                log.debug("Window title: %r", title)
+            except Exception:
+                return   # ws closed – let the outer loop handle reconnect
+
+
 def dispatch(raw: str | bytes) -> None:
     """Route incoming message to the appropriate handler."""
     # Binary frame → CH9329 protocol
@@ -416,6 +491,8 @@ def dispatch(raw: str | bytes) -> None:
     t = msg.get("type")
     if t == "key":
         handle_key(msg.get("data", ""))
+    elif t == "hotkey":
+        handle_hotkey(msg.get("combo", ""))
     elif t == "mouse_move":
         handle_mouse_move(int(msg["x"]), int(msg["y"]))
     elif t == "mouse_click":
@@ -438,8 +515,30 @@ async def run(server_url: str) -> None:
         try:
             async with websockets.connect(agent_url) as ws:
                 log.info("Agent connected. Waiting for commands…")
-                async for message in ws:
-                    dispatch(message)
+
+                async def _receive() -> None:
+                    async for message in ws:
+                        msg_id = None
+                        if isinstance(message, str):
+                            try:
+                                msg_id = json.loads(message).get("id")
+                            except Exception:
+                                pass
+                        dispatch(message)
+                        if msg_id:
+                            try:
+                                await ws.send(json.dumps({"type": "ack", "id": msg_id, "ok": True}))
+                            except Exception:
+                                pass
+
+                receive_task = asyncio.create_task(_receive())
+                title_task   = asyncio.create_task(window_title_task(ws))
+                done, pending = await asyncio.wait(
+                    {receive_task, title_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for t in pending:
+                    t.cancel()
         except (websockets.ConnectionClosed, OSError) as exc:
             log.warning("Disconnected (%s). Reconnecting in 5 s…", exc)
             await asyncio.sleep(5)

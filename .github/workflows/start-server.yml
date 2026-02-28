@@ -53,6 +53,8 @@ jobs:
       # 4. Start uvicorn server in background
       # -----------------------------------------------------------------------
       - name: Start uvicorn server
+        env:
+          SESSION_DURATION_MINUTES: ${{ github.event.inputs.duration_minutes }}
         run: |
           nohup uvicorn server:app --host 127.0.0.1 --port 8765 \
             > /tmp/uvicorn.log 2>&1 &
