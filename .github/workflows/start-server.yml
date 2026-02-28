@@ -95,15 +95,13 @@ jobs:
 
           echo "$PUBLIC_URL" > /tmp/tunnel_url.txt
           echo "::notice title=TunnelURL::$PUBLIC_URL"
-          # Write tunnel URL to .tunnel-url in the repo (contents API, works with GITHUB_TOKEN)
-          EXISTING_SHA=$(curl -s             -H "Authorization: Bearer $GITHUB_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/.tunnel-url"             | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || true)
-          ENCODED_URL=$(echo -n "$PUBLIC_URL" | base64 -w0)
-          if [ -n "$EXISTING_SHA" ]; then
-            PAYLOAD=$(printf '{"message":"chore: update tunnel URL","content":"%s","sha":"%s"}' "$ENCODED_URL" "$EXISTING_SHA")
-          else
-            PAYLOAD=$(printf '{"message":"chore: add tunnel URL","content":"%s"}' "$ENCODED_URL")
-          fi
-          curl -fsSL -X PUT             -H "Authorization: Bearer $GITHUB_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/.tunnel-url"             -d "$PAYLOAD" > /dev/null
+          # Write tunnel URL to .tunnel-url in the repo using git push
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          echo "$PUBLIC_URL" > .tunnel-url
+          git add .tunnel-url
+          git commit -m "chore: update tunnel URL" || echo "No changes to commit"
+          git push || echo "git push failed, URL available in logs above"
           echo "Tunnel URL written to repo file .tunnel-url"
           echo ""
           echo "============================================================"
