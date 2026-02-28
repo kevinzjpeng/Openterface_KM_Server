@@ -40,11 +40,9 @@ jobs:
       - name: Install cloudflared
         run: |
           set -eux
-          CF_VERSION=$(curl -fsSL https://api.github.com/repos/cloudflare/cloudflared/releases/latest \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
-          echo "cloudflared version: $CF_VERSION"
+          # Use /latest/download/ redirect — no API call needed, avoids rate limits
           curl -fsSL \
-            "https://github.com/cloudflare/cloudflared/releases/download/${CF_VERSION}/cloudflared-linux-amd64.deb" \
+            "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb" \
             -o /tmp/cloudflared.deb
           sudo dpkg -i /tmp/cloudflared.deb
           cloudflared --version
