@@ -1,6 +1,8 @@
 export function createScreenshotModule({ getWs, incSent, focusPrimaryInput }) {
   const screenshotOverlay = document.getElementById('screenshot-overlay');
   let lastScreenshotData = null;
+  let autoRefreshInterval = null;
+  let autoRefreshRate = 0; // 0 = off
 
   function renderPinnedScreenshot(data) {
     const pinnedImg = document.getElementById('screenshot-pinned-img');
@@ -35,6 +37,23 @@ export function createScreenshotModule({ getWs, incSent, focusPrimaryInput }) {
     if (screenshotOverlay) screenshotOverlay.classList.remove('show');
     ws.send(JSON.stringify({ type: 'screenshot_request' }));
     if (typeof incSent === 'function') incSent();
+  }
+
+  function startAutoRefresh(intervalSeconds) {
+    stopAutoRefresh();
+    if (intervalSeconds <= 0) return;
+    autoRefreshRate = intervalSeconds;
+    autoRefreshInterval = setInterval(() => {
+      requestPinnedScreenshot();
+    }, intervalSeconds * 1000);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+    }
+    autoRefreshRate = 0;
   }
 
   function onScreenshot(msg) {
@@ -83,10 +102,18 @@ export function createScreenshotModule({ getWs, incSent, focusPrimaryInput }) {
     const btnClose = document.getElementById('btn-screenshot-close');
     const btnPin = document.getElementById('btn-screenshot-pin');
     const btnClear = document.getElementById('btn-screenshot-unpin');
+    const autoRefreshSelect = document.getElementById('auto-refresh-select');
 
     if (btnScreenshot) btnScreenshot.onclick = requestPinnedScreenshot;
     if (btnRefresh) btnRefresh.onclick = requestPinnedScreenshot;
     if (btnPinnedRefresh) btnPinnedRefresh.onclick = requestPinnedScreenshot;
+
+    if (autoRefreshSelect) {
+      autoRefreshSelect.onchange = (e) => {
+        const intervalSeconds = parseFloat(e.target.value);
+        startAutoRefresh(intervalSeconds);
+      };
+    }
 
     if (btnPin) {
       btnPin.onclick = () => {
@@ -127,5 +154,7 @@ export function createScreenshotModule({ getWs, incSent, focusPrimaryInput }) {
     requestPinnedScreenshot,
     renderPinnedScreenshot,
     clearPinnedScreenshot,
+    startAutoRefresh,
+    stopAutoRefresh,
   };
 }

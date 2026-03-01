@@ -367,6 +367,24 @@ body {
   flex-shrink: 0;
   background: var(--surface);
 }
+#auto-refresh-select {
+  padding: 4px 6px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  font-size: 10px !important;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+#auto-refresh-select:hover {
+  background: var(--surface2) !important;
+  color: var(--text) !important;
+}
+#auto-refresh-select:focus {
+  outline: none;
+  border-color: var(--blue) !important;
+}
 #screenshot-pinned-body {
   overflow: auto;
   display: flex;
