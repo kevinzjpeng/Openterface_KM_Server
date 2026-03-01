@@ -192,7 +192,7 @@ jobs:
           PUBLIC_URL=$(cat /tmp/tunnel_url.txt)
           TUNNEL_TYPE=$(cat /tmp/tunnel_type.txt)
           
-          echo "::notice title=TunnelURL::$PUBLIC_URL (via $TUNNEL_TYPE)"
+          echo "::notice title=TunnelURL::${PUBLIC_URL} (via ${TUNNEL_TYPE})"
           
           # Store in GitHub Actions repository variables (secure, no git history)
           gh variable set KEYMOD_TUNNEL_URL "$PUBLIC_URL" --repo "$GITHUB_REPOSITORY"
