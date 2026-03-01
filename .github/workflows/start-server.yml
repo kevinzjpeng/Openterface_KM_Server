@@ -195,8 +195,8 @@ jobs:
           echo "::notice title=TunnelURL::${PUBLIC_URL} (via ${TUNNEL_TYPE})"
           
           # Store in GitHub Actions repository variables (secure, no git history)
-          gh variable set KEYMOD_TUNNEL_URL "$PUBLIC_URL" --repo "$GITHUB_REPOSITORY"
-          gh variable set KEYMOD_TUNNEL_TYPE "$TUNNEL_TYPE" --repo "$GITHUB_REPOSITORY"
+          gh variable set KEYMOD_TUNNEL_URL --body "$PUBLIC_URL"
+          gh variable set KEYMOD_TUNNEL_TYPE --body "$TUNNEL_TYPE"
           
           echo "Tunnel info stored in GitHub Actions variables:"
           echo "  KEYMOD_TUNNEL_URL  = $PUBLIC_URL"
