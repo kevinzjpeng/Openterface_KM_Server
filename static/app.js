@@ -145,6 +145,8 @@
             if (typeof renderSysTab !== 'undefined') {
               renderSysTab();
             }
+            // Reset built-in macros to match the agent OS
+            applyDefaultMacrosForOS(targetOS);
             banner(`\r\n\x1b[0;36m  ✓ Switched to ${targetOS.toUpperCase()} shortcuts\x1b[0m\r\n`);
           }
         } else if (msg.type === 'session_info') {
@@ -518,6 +520,7 @@
       btn.addEventListener('click', () => {
         targetOS = id;
         localStorage.setItem('km_target_os', targetOS);
+        applyDefaultMacrosForOS(targetOS);
         renderSysTab();
         term.focus();
       });
@@ -674,17 +677,47 @@
   /* ------------------------------------------------------------------ */
   /* Macros                                                               */
   /* ------------------------------------------------------------------ */
-  const DEFAULT_MACROS = [
-    { id:'dm1', name:'Show Desktop',  steps:[{t:'hotkey',v:'win+d'}] },
-    { id:'dm2', name:'Open Run…',    steps:[{t:'hotkey',v:'win+r'}] },
-    { id:'dm3', name:'Open Notepad',  steps:[{t:'hotkey',v:'win+r'},{t:'wait',v:'500'},{t:'key',v:'notepad\r'}] },
-    { id:'dm4', name:'Open Terminal', steps:[{t:'hotkey',v:'win+r'},{t:'wait',v:'500'},{t:'key',v:'cmd\r'}] },
-    { id:'dm5', name:'Lock Screen',   steps:[{t:'hotkey',v:'win+l'}] },
-  ];
+  const DEFAULT_MACROS_BY_OS = {
+    windows: [
+      { id:'dm1', name:'Show Desktop',  steps:[{t:'hotkey',v:'win+d'}] },
+      { id:'dm2', name:'Open Run…',     steps:[{t:'hotkey',v:'win+r'}] },
+      { id:'dm3', name:'Open Notepad',  steps:[{t:'hotkey',v:'win+r'},{t:'wait',v:'500'},{t:'key',v:'notepad\r'}] },
+      { id:'dm4', name:'Open Terminal', steps:[{t:'hotkey',v:'win+r'},{t:'wait',v:'500'},{t:'key',v:'cmd\r'}] },
+      { id:'dm5', name:'Lock Screen',   steps:[{t:'hotkey',v:'win+l'}] },
+    ],
+    macos: [
+      { id:'dm1', name:'Spotlight',     steps:[{t:'hotkey',v:'cmd+space'}] },
+      { id:'dm2', name:'App Switcher',  steps:[{t:'hotkey',v:'cmd+tab'}] },
+      { id:'dm3', name:'Open Terminal', steps:[{t:'hotkey',v:'cmd+space'},{t:'wait',v:'500'},{t:'key',v:'terminal\r'}] },
+      { id:'dm4', name:'Lock Screen',   steps:[{t:'hotkey',v:'ctrl+cmd+q'}] },
+      { id:'dm5', name:'Force Quit',    steps:[{t:'hotkey',v:'cmd+opt+esc'}] },
+    ],
+    linux: [
+      { id:'dm1', name:'Show Desktop',  steps:[{t:'hotkey',v:'super+d'}] },
+      { id:'dm2', name:'Open Terminal', steps:[{t:'hotkey',v:'ctrl+alt+t'}] },
+      { id:'dm3', name:'Lock Screen',   steps:[{t:'hotkey',v:'ctrl+alt+l'}] },
+      { id:'dm4', name:'App Launcher',  steps:[{t:'hotkey',v:'super'}] },
+      { id:'dm5', name:'Switch Window', steps:[{t:'hotkey',v:'alt+tab'}] },
+    ],
+  };
+
+  function getDefaultMacros(os) {
+    return (DEFAULT_MACROS_BY_OS[os] || DEFAULT_MACROS_BY_OS.windows).map(m => ({...m, steps: m.steps.map(s => ({...s}))}));
+  }
 
   let macros = [];
-  try { macros = JSON.parse(localStorage.getItem('km_macros') || 'null') || DEFAULT_MACROS.map(m=>({...m,steps:m.steps.map(s=>({...s}))}) ); }
-  catch (_) { macros = DEFAULT_MACROS.map(m=>({...m,steps:m.steps.map(s=>({...s}))})); }
+  try { macros = JSON.parse(localStorage.getItem('km_macros') || 'null') || getDefaultMacros(targetOS === 'unknown' ? 'windows' : targetOS); }
+  catch (_) { macros = getDefaultMacros(targetOS === 'unknown' ? 'windows' : targetOS); }
+
+  // Replace built-in default macros (id starts with 'dm') with OS-specific ones,
+  // preserving any user-added macros
+  function applyDefaultMacrosForOS(os) {
+    const newDefaults = getDefaultMacros(os);
+    const userMacros = macros.filter(m => !m.id.startsWith('dm'));
+    macros = [...newDefaults, ...userMacros];
+    saveMacroData();
+    renderMacroList();
+  }
 
   function saveMacroData() {
     try { localStorage.setItem('km_macros', JSON.stringify(macros)); } catch (_) {}
