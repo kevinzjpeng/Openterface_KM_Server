@@ -8,10 +8,18 @@ on:
         description: "How long to keep the server alive (minutes, max 60)"
         required: false
         default: "10"
+      tunnel_type:
+        description: "Which reverse proxy to use"
+        required: false
+        default: "cloudflare"
+        type: choice
+        options:
+          - cloudflare
+          - frp
 
 jobs:
   serve:
-    name: Run WebSocket server via Cloudflare tunnel
+    name: Run WebSocket server via reverse proxy tunnel
     runs-on: ubuntu-latest
     timeout-minutes: 65
     permissions:
@@ -50,11 +58,19 @@ jobs:
           cloudflared --version
 
       # -----------------------------------------------------------------------
-      # 3b. Install localtunnel (fallback tunnel solution)
+      # 3b. Install FRP client (fallback tunnel solution - optional)
       # -----------------------------------------------------------------------
-      - name: Install localtunnel
-        run: |
-          npm install -g localtunnel
+      # To use FRP as fallback, set these GitHub Secrets:
+      #   FRP_SERVER_ADDR    - FRP server address (e.g., frp.example.com:7000)
+      #   FRP_TOKEN          - FRP token/password
+      # Uncomment the following section if you have FRP configured:
+      #
+      # - name: Install FRP client
+      #   if: env.FRP_SERVER_ADDR != ''
+      #   run: |
+      #     wget https://github.com/fatedier/frp/releases/download/v0.55.1/frp_0.55.1_linux_amd64.tar.gz
+      #     tar xzf frp_0.55.1_linux_amd64.tar.gz
+      #     mv frp_0.55.1_linux_amd64/frpc /usr/local/bin/
 
       # -----------------------------------------------------------------------
       # 4. Start uvicorn server in background
@@ -75,98 +91,123 @@ jobs:
           done
 
       # -----------------------------------------------------------------------
-      # 5. Start Cloudflare tunnel first, fallback to LocalTunnel if needed
+      # 5. Start selected reverse proxy tunnel
       # -----------------------------------------------------------------------
-      - name: Start tunnel (Cloudflare with LocalTunnel fallback)
+      - name: Start tunnel (Cloudflare)
+        if: github.event.inputs.tunnel_type == 'cloudflare' || github.event.inputs.tunnel_type == ''
         run: |
-          PUBLIC_URL=""
-          TUNNEL_TYPE=""
-
-          # Try Cloudflare first
-          echo "Attempting to start Cloudflare tunnel..."
+          echo "Starting Cloudflare tunnel..."
           nohup cloudflared tunnel --url http://127.0.0.1:8765 \
             > /tmp/cf.log 2>&1 &
           CF_PID=$!
           
+          PUBLIC_URL=""
           for i in $(seq 1 40); do
             sleep 3
             PUBLIC_URL=$(grep -oP 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' /tmp/cf.log | head -1)
             if [ -n "$PUBLIC_URL" ]; then
-              TUNNEL_TYPE="Cloudflare"
               echo "✓ Cloudflare tunnel started successfully"
+              echo "$PUBLIC_URL" > /tmp/tunnel_url.txt
+              echo "Cloudflare" > /tmp/tunnel_type.txt
               break
             fi
           done
 
-          # Fallback to LocalTunnel if Cloudflare failed
           if [ -z "$PUBLIC_URL" ]; then
-            echo "⚠ Cloudflare tunnel failed, falling back to LocalTunnel..."
-            kill $CF_PID 2>/dev/null || true
-            sleep 2
-            
-            nohup lt --port 8765 --print-requests \
-              > /tmp/lt.log 2>&1 &
-            LT_PID=$!
-            
-            LT_PASSWORD=""
-            for i in $(seq 1 40); do
-              sleep 2
-              # LocalTunnel output format: https://adjective-noun-random.loca.lt
-              PUBLIC_URL=$(grep -oP 'https://[a-zA-Z0-9\-]+\.loca\.lt' /tmp/lt.log | head -1)
-              # Extract password if present: "password: xxxxxxxx"
-              LT_PASSWORD=$(grep -oP 'password:\s*\K[a-zA-Z0-9]+' /tmp/lt.log | head -1)
-              if [ -n "$PUBLIC_URL" ]; then
-                TUNNEL_TYPE="LocalTunnel"
-                echo "✓ LocalTunnel started successfully"
-                break
-              fi
-            done
-          fi
-
-          if [ -z "$PUBLIC_URL" ]; then
-            echo "ERROR: both Cloudflare and LocalTunnel failed"
-            echo "=== Cloudflare log ==="
-            cat /tmp/cf.log || true
-            echo ""
-            echo "=== LocalTunnel log ==="
-            cat /tmp/lt.log || true
+            echo "ERROR: Cloudflare tunnel failed to start"
+            cat /tmp/cf.log
             exit 1
           fi
 
-          echo "$PUBLIC_URL" > /tmp/tunnel_url.txt
-          echo "$TUNNEL_TYPE" > /tmp/tunnel_type.txt
+      - name: Start tunnel (FRP)
+        if: github.event.inputs.tunnel_type == 'frp'
+        run: |
+          # FRP Configuration from GitHub Secrets
+          FRP_SERVER_ADDR="${{ secrets.FRP_SERVER_ADDR }}"
+          FRP_TOKEN="${{ secrets.FRP_TOKEN }}"
+          FRP_DOMAIN="${{ secrets.FRP_DOMAIN }}"
           
-          # Save password if LocalTunnel
-          if [ -n "$LT_PASSWORD" ]; then
-            echo "$LT_PASSWORD" > /tmp/lt_password.txt
-            echo "$LT_PASSWORD" > .tunnel-password
+          if [ -z "$FRP_SERVER_ADDR" ] || [ -z "$FRP_TOKEN" ]; then
+            echo "ERROR: FRP_SERVER_ADDR and FRP_TOKEN secrets must be configured"
+            echo "Please add these GitHub Secrets to your repository:"
+            echo "  FRP_SERVER_ADDR - FRP server address (e.g., frp.example.com:7000)"
+            echo "  FRP_TOKEN       - FRP authentication token"
+            echo "  FRP_DOMAIN      - Domain or subdomain for the tunnel (e.g., km.example.com)"
+            exit 1
           fi
+          
+          echo "Starting FRP tunnel..."
+          
+          # Create FRP client config
+          cat > /tmp/frpc.ini << EOF
+          [common]
+          server_addr = ${FRP_SERVER_ADDR%:*}
+          server_port = ${FRP_SERVER_ADDR#*:}
+          token = $FRP_TOKEN
+          
+          [km-server]
+          type = http
+          local_ip = 127.0.0.1
+          local_port = 8765
+          custom_domains = $FRP_DOMAIN
+          EOF
+          
+          # Download and start FRP if not already installed
+          if ! command -v frpc &> /dev/null; then
+            echo "Installing FRP client..."
+            wget -q https://github.com/fatedier/frp/releases/download/v0.55.1/frp_0.55.1_linux_amd64.tar.gz
+            tar xzf frp_0.55.1_linux_amd64.tar.gz
+            mv frp_0.55.1_linux_amd64/frpc /usr/local/bin/
+          fi
+          
+          nohup frpc -c /tmp/frpc.ini > /tmp/frpc.log 2>&1 &
+          FRPC_PID=$!
+          
+          PUBLIC_URL=""
+          for i in $(seq 1 40); do
+            sleep 3
+            # Check if FRP is running and has bound the domain
+            if grep -q "successfully" /tmp/frpc.log; then
+              PUBLIC_URL="https://${FRP_DOMAIN}"
+              echo "✓ FRP tunnel started successfully"
+              echo "$PUBLIC_URL" > /tmp/tunnel_url.txt
+              echo "FRP" > /tmp/tunnel_type.txt
+              break
+            fi
+          done
+
+          if [ -z "$PUBLIC_URL" ]; then
+            echo "ERROR: FRP tunnel failed to start"
+            cat /tmp/frpc.log
+            exit 1
+          fi
+
+      # -----------------------------------------------------------------------
+      # 5b. Store tunnel URL in GitHub Actions variables (secure, no git history)
+      # -----------------------------------------------------------------------
+      - name: Save tunnel info to GitHub Actions variables
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PUBLIC_URL=$(cat /tmp/tunnel_url.txt)
+          TUNNEL_TYPE=$(cat /tmp/tunnel_type.txt)
           
           echo "::notice title=TunnelURL::$PUBLIC_URL (via $TUNNEL_TYPE)"
           
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-          echo "$PUBLIC_URL" > .tunnel-url
-          git add .tunnel-url
-          if [ -n "$LT_PASSWORD" ]; then
-            git add .tunnel-password
-          fi
-          git commit -m "chore: update tunnel URL and password (via $TUNNEL_TYPE)" || echo "No changes to commit"
-          git push || echo "git push failed, URL available in logs above"
-          echo "Tunnel URL written to repo file .tunnel-url"
+          # Store in GitHub Actions repository variables (secure, no git history)
+          gh variable set KEYMOD_TUNNEL_URL "$PUBLIC_URL" --repo "$GITHUB_REPOSITORY"
+          gh variable set KEYMOD_TUNNEL_TYPE "$TUNNEL_TYPE" --repo "$GITHUB_REPOSITORY"
+          
+          echo "Tunnel info stored in GitHub Actions variables:"
+          echo "  KEYMOD_TUNNEL_URL  = $PUBLIC_URL"
+          echo "  KEYMOD_TUNNEL_TYPE = $TUNNEL_TYPE"
           echo ""
           echo "============================================================"
           echo "  TUNNEL TYPE     : $TUNNEL_TYPE"
           echo "  PUBLIC HTTP URL : $PUBLIC_URL"
           echo "  PUBLIC WSS URL  : ${PUBLIC_URL/https:/wss:}/ws"
-          if [ -n "$LT_PASSWORD" ]; then
-            echo "  PASSWORD        : $LT_PASSWORD"
-            echo ""
-            echo "  ⚠  LocalTunnel requires password authentication!"
-            echo "     Use in browser: $PUBLIC_URL/?password=$LT_PASSWORD"
-          fi
-          echo "  Health-check    : curl $PUBLIC_URL"
-          echo "  Client count    : curl $PUBLIC_URL/clients"
+          echo "  Health-check    : curl $PUBLIC_URL/status"
+          echo "  Agent command   : python3 agent.py ${PUBLIC_URL/https:/wss:}"
           echo "============================================================"
           echo ""
 
@@ -196,5 +237,5 @@ jobs:
           echo "=== cloudflared log ==="
           cat /tmp/cf.log || true
           echo ""
-          echo "=== localtunnel log ==="
-          cat /tmp/lt.log || true
+          echo "=== frpc log ==="
+          cat /tmp/frpc.log || true

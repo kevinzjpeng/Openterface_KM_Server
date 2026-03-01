@@ -19,10 +19,11 @@ One-liner (no local clone needed, works with private repos)
 
 Local usage
 -----------
-  python3 trigger_build.py                  # trigger + watch for tunnel URL
-  python3 trigger_build.py --duration 20    # keep server alive 20 min
-  python3 trigger_build.py --no-watch       # trigger and exit immediately
-  python3 trigger_build.py --watch-only     # watch latest run (no trigger)
+  python3 trigger_build.py                           # trigger + watch for tunnel URL (default: Cloudflare)
+  python3 trigger_build.py --duration 20             # keep server alive 20 min
+  python3 trigger_build.py --tunnel-type frp         # use FRP instead of Cloudflare
+  python3 trigger_build.py --no-watch                # trigger and exit immediately
+  python3 trigger_build.py --watch-only              # watch latest run (no trigger)
   python3 trigger_build.py --input debug=true --input platform=linux
 """
 
@@ -56,8 +57,9 @@ def _load_dotenv(path: Path = Path(".env")) -> None:
 
 _load_dotenv()
 
-# Match both Cloudflare (https://xxxx.trycloudflare.com) and LocalTunnel (https://xxxx.loca.lt) URLs
-_TUNNEL_RE = re.compile(r"https://[a-zA-Z0-9\-]+\.(trycloudflare\.com|loca\.lt)")
+# Match Cloudflare tunnel URLs (and custom FRP domains if configured)
+# Example FRP: https://km.example.com, https://frp.local, etc.
+_TUNNEL_RE = re.compile(r"https://[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+(?:\.[a-zA-Z]{2,}|\.local|\.test)")
 
 
 # ---------------------------------------------------------------------------
@@ -110,20 +112,17 @@ def _get_latest_run(repo: str, token: str, workflow: str):
 
 def watch_for_tunnel_url(repo: str, token: str, run_id: int, dispatched_at: str = ""):
     """
-    Poll the repo file `.tunnel-url` (written by the workflow using the
-    contents API + GITHUB_TOKEN with contents:write permission).
-    Also read `.tunnel-password` if LocalTunnel is used.
-    Returns (tunnel_url, tunnel_type, password), or (None, None, None) on timeout/failure.
+    Poll GitHub Actions repository variables KEYMOD_TUNNEL_URL and KEYMOD_TUNNEL_TYPE
+    (set by the workflow when tunnel is ready).
+    Returns (tunnel_url, tunnel_type), or (None, None) on timeout/failure.
     """
     jobs_url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs"
-    file_url = f"https://api.github.com/repos/{repo}/contents/.tunnel-url"
-    password_file_url = f"https://api.github.com/repos/{repo}/contents/.tunnel-password"
+    var_url_base = f"https://api.github.com/repos/{repo}/actions/variables"
 
     print(f"\nWatching: https://github.com/{repo}/actions/runs/{run_id}")
-    print("Polling .tunnel-url file in repo (ready in ~60 s) …\n")
+    print("Polling GitHub Actions variables (ready in ~60 s) …\n")
 
     last_step = ""
-    lt_password = None
 
     for attempt in range(70):   # poll up to ~7 minutes
         time.sleep(6)
@@ -146,62 +145,30 @@ def watch_for_tunnel_url(repo: str, token: str, run_id: int, dispatched_at: str 
                     last_step = label
                 if status == "completed" and conclusion in ("failure", "cancelled", "timed_out"):
                     print(f"\nRun ended with: {conclusion}")
-                    return None, None, None
+                    return None, None
         except Exception:
             pass
 
-        # -- Poll .tunnel-url file --
+        # -- Poll GitHub Actions variables --
         try:
-            file_data  = _gh_get(file_url, token)
-            import base64 as _b64
-            raw  = _b64.b64decode(file_data["content"]).decode().strip()
-            m    = _TUNNEL_RE.search(raw)
-            if m:
-                tunnel_url = m.group(0)
-                tunnel_type = "Cloudflare" if "trycloudflare" in tunnel_url else "LocalTunnel"
+            # Get KEYMOD_TUNNEL_URL variable
+            url_var = _gh_get(f"{var_url_base}/KEYMOD_TUNNEL_URL", token)
+            tunnel_url = url_var.get("value", "").strip()
+            
+            if tunnel_url:
+                # Get KEYMOD_TUNNEL_TYPE variable
+                type_var = _gh_get(f"{var_url_base}/KEYMOD_TUNNEL_TYPE", token)
+                tunnel_type = type_var.get("value", "Unknown").strip()
                 
-                # Guard against a stale file from a previous run by checking
-                # that the commit timestamp is close to dispatched_at.
-                # Allow 90 s of clock skew between local machine and GitHub.
-                commit_date = ""
-                try:
-                    commits_url = f"https://api.github.com/repos/{repo}/commits?path=.tunnel-url&per_page=1"
-                    commits     = _gh_get(commits_url, token)
-                    if commits:
-                        commit_date = commits[0].get("commit", {}).get("committer", {}).get("date", "")[:19]
-                except Exception:
-                    pass
-
-                # Build a threshold 90 s before dispatch to absorb clock skew
-                try:
-                    _dt = datetime.datetime.strptime(dispatched_at, "%Y-%m-%dT%H:%M:%S")
-                    stale_threshold = (_dt - datetime.timedelta(seconds=90)).strftime("%Y-%m-%dT%H:%M:%S")
-                except Exception:
-                    stale_threshold = dispatched_at
-
-                if dispatched_at and commit_date and commit_date < stale_threshold:
-                    print(f"  [skip] Stale URL in file (committed {commit_date}, dispatched {dispatched_at})")
-                    continue   # stale from a previous run
-                
-                # If LocalTunnel, try to read the password file
-                if tunnel_type == "LocalTunnel" and not lt_password:
-                    try:
-                        password_data = _gh_get(password_file_url, token)
-                        lt_password = _b64.b64decode(password_data["content"]).decode().strip()
-                    except urllib.error.HTTPError:
-                        pass  # password file might not exist yet
-                    except Exception:
-                        pass
-                
-                return tunnel_url, tunnel_type, lt_password
+                return tunnel_url, tunnel_type
         except urllib.error.HTTPError as exc:
-            if exc.code != 404:  # 404 = file not written yet
-                print(f"  [file] HTTP {exc.code}")
+            if exc.code != 404:
+                print(f"  [vars] HTTP {exc.code}")
         except Exception as exc:
-            print(f"  [file] {exc}")
+            print(f"  [vars] {exc}")
 
     print("Timed out waiting for tunnel URL (7 min).")
-    return None, None, None
+    return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +210,13 @@ def parse_args() -> argparse.Namespace:
         dest="inputs",
         default=[],
         help="Workflow input (may be repeated, e.g. --input debug=true)",
+    )
+    parser.add_argument(
+        "--tunnel-type",
+        default="cloudflare",
+        choices=["cloudflare", "frp"],
+        metavar="TYPE",
+        help="Reverse proxy tunnel type: cloudflare or frp (default: cloudflare)",
     )
     parser.add_argument(
         "--token",
@@ -296,14 +270,12 @@ def main() -> None:
             sys.exit(1)
         run_id, html_url = result
         print(f"Latest run  : {html_url}")
-        tunnel, tunnel_type, password = watch_for_tunnel_url(args.repo, args.token, run_id, dispatched_at="")
+        tunnel, tunnel_type = watch_for_tunnel_url(args.repo, args.token, run_id, dispatched_at="")
         if tunnel:
             print(f"\n{'='*56}")
             print(f"  TUNNEL TYPE : {tunnel_type}")
             print(f"  HTTP URL    : {tunnel}")
             print(f"  WSS  URL    : {tunnel.replace('https:', 'wss:')}/ws")
-            if password:
-                print(f"  PASSWORD    : {password}")
             print(f"  Agent       : python3 agent.py {tunnel.replace('https:', 'wss:')}")
             print(f"  One-liner   : curl -sSL {tunnel}/run.sh | bash -s -- {tunnel}")
             print(f"{'='*56}")
@@ -327,6 +299,9 @@ def main() -> None:
     # Inject duration_minutes if --duration was given
     if args.duration is not None:
         inputs["duration_minutes"] = str(args.duration)
+
+    # Inject tunnel_type
+    inputs["tunnel_type"] = args.tunnel_type
 
     # Build request
     url = (
@@ -388,14 +363,12 @@ def main() -> None:
         sys.exit(1)
 
     run_id, html_url = result
-    tunnel, tunnel_type, password = watch_for_tunnel_url(args.repo, args.token, run_id, dispatched_at)
+    tunnel, tunnel_type = watch_for_tunnel_url(args.repo, args.token, run_id, dispatched_at)
     if tunnel:
         print(f"\n{'='*56}")
         print(f"  TUNNEL TYPE : {tunnel_type}")
         print(f"  HTTP URL    : {tunnel}")
         print(f"  WSS  URL    : {tunnel.replace('https:', 'wss:')}/ws")
-        if password:
-            print(f"  PASSWORD    : {password}")
         print(f"  Agent       : python3 agent.py {tunnel.replace('https:', 'wss:')}")
         print(f"  One-liner   : curl -sSL {tunnel}/run.sh | bash -s -- {tunnel}")
         print(f"{'='*56}")
