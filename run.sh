@@ -9,6 +9,7 @@
 #
 # The script will automatically:
 #   - Download agent.py from the tunnel
+#   - Install required dependencies (websockets, pynput, mss, Pillow)
 #   - Run it with the correct WebSocket URL (wss://)
 #   - Pass through any additional arguments to agent.py
 #
@@ -42,6 +43,19 @@ else
   exit 1
 fi
 
+# ── Install required Python packages ────────────────────────────────────────
+echo "Installing required Python packages …"
+if ! python3 -m pip install -q websockets pynput mss Pillow 2>/dev/null; then
+  # Try with --user flag if standard install fails (no admin rights)
+  python3 -m pip install --user -q websockets pynput mss Pillow 2>/dev/null || {
+    echo "Warning: Could not install all packages with pip. Attempting with sudo …"
+    sudo python3 -m pip install -q websockets pynput mss Pillow || {
+      echo "ERROR: Failed to install required packages." >&2
+      exit 1
+    }
+  }
+fi
+
 # ── Download agent.py to a temp file ────────────────────────────────────────
 TMP="$(mktemp /tmp/agent_XXXXXX.py)"
 trap 'rm -f "$TMP"' EXIT
@@ -56,4 +70,5 @@ fi
 # ── Run agent with WSS URL and any additional args ──────────────────────────
 shift || true  # remove the tunnel URL from args
 python3 "$TMP" "$WSS_URL" "$@"
+
 
