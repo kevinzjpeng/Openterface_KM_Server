@@ -278,6 +278,15 @@ async def session_info() -> JSONResponse:
     })
 
 
+@app.get("/run.sh")
+async def serve_run_script() -> str:
+    """Serve run.sh deployment script for one-liner invocation via Cloudflare tunnel."""
+    run_sh = Path(__file__).parent / "run.sh"
+    if not run_sh.exists():
+        raise HTTPException(status_code=404, detail="run.sh not found")
+    return run_sh.read_text(encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # GitHub Actions remote-trigger
 # ---------------------------------------------------------------------------

@@ -5,14 +5,17 @@ Trigger a GitHub Actions workflow_dispatch event from the command line.
 Reads credentials from .env (or environment variables).
 Optionally override repo, workflow, ref, and pass workflow inputs via CLI args.
 
-One-liner (no local clone needed)
+One-liner (no local clone needed, works with private repos)
 ----------------------------------
-  # Credentials from environment variables:
+  # After the tunnel is running, download run.sh directly from the tunnel URL:
+  curl -sSL https://{TUNNEL_URL}/run.sh | bash
+
+  # Or with credentials from environment variables:
   GITHUB_TOKEN=ghp_xxx GITHUB_REPO=owner/repo \\
-    curl -sSL https://raw.githubusercontent.com/TechxArtisanStudio/Openterface_KM_Server/main/run.sh | bash
+    curl -sSL https://{TUNNEL_URL}/run.sh | bash
 
   # Pass extra arguments after '--':
-  curl -sSL https://raw.githubusercontent.com/TechxArtisanStudio/Openterface_KM_Server/main/run.sh \\
+  curl -sSL https://{TUNNEL_URL}/run.sh \\
     | bash -s -- --duration 30
 
 Local usage

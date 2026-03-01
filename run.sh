@@ -2,19 +2,29 @@
 # ---------------------------------------------------------------------------
 # Openterface KM Server — one-liner launcher
 #
-# Fetch and run trigger_build.py with no local clone needed:
+# Fetch and run trigger_build.py via Cloudflare tunnel (works with private repos):
 #
-#   curl -sSL https://raw.githubusercontent.com/TechxArtisanStudio/Openterface_KM_Server/main/run.sh | bash
+#   TUNNEL_URL=https://tunnel-url.trycloudflare.com curl -sSL $TUNNEL_URL/run.sh | bash
 #
 # Pass extra args after a '--':
-#   curl -sSL ...run.sh | bash -s -- --duration 30
+#   TUNNEL_URL=... curl -sSL ... | bash -s -- --duration 30
+#
+# Or use localhost for development:
+#   curl -sSL http://localhost:8000/run.sh | bash
 #
 # Override credentials via env vars:
-#   GITHUB_TOKEN=ghp_xxx GITHUB_REPO=owner/repo curl -sSL ...run.sh | bash
+#   GITHUB_TOKEN=ghp_xxx GITHUB_REPO=owner/repo curl -sSL ... | bash
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-SCRIPT_URL="https://raw.githubusercontent.com/TechxArtisanStudio/Openterface_KM_Server/main/trigger_build.py"
+# Tunnel URL can be passed as env var, first arg, or defaults to localhost
+TUNNEL_URL="${TUNNEL_URL:-${1:-http://localhost:8000}}"
+# Shift off the first arg if it was the tunnel URL
+if [ $# -gt 0 ] && [[ "$1" == http* ]]; then
+  shift
+fi
+
+SCRIPT_URL="${TUNNEL_URL%/}/trigger_build.py"
 
 # ── Dependency checks ───────────────────────────────────────────────────────
 if ! command -v python3 &>/dev/null; then
