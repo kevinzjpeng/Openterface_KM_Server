@@ -175,11 +175,25 @@ body {
   padding: 6px 6px 4px 6px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
-  grid-template-rows: auto minmax(280px, 1fr);
+  grid-template-rows: var(--screen-height, minmax(180px, 34vh)) auto var(--keyboard-height, minmax(280px, 1fr));
   grid-template-areas:
     "screen panel"
+    "splitter panel"
     "keyboard panel";
   gap: 6px;
+}
+#resize-splitter {
+  grid-area: splitter;
+  height: 6px;
+  background: var(--border);
+  cursor: row-resize;
+  transition: background 0.2s, opacity 0.2s;
+  user-select: none;
+  opacity: 0.7;
+}
+#resize-splitter:hover {
+  background: var(--blue);
+  opacity: 1;
 }
 #terminal { flex: 1; overflow: hidden; border-radius: var(--radius); min-width: 0; }
 .xterm { height: 100%; }
@@ -345,8 +359,8 @@ body {
 /* Pinned screenshot section (above terminal) */
 #screenshot-pinned {
   grid-area: screen;
-  margin-bottom: 6px;
-  height: clamp(180px, 34vh, 300px);
+  margin-bottom: 0;
+  height: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface2);
@@ -470,7 +484,9 @@ body {
     display: flex;
     flex-direction: column;
     overflow: auto;
+    grid-template-areas: none;
   }
+  #resize-splitter { display: none; }
   #input-panel {
     width: 100%; height: 220px;
     flex-direction: row; overflow: visible;
@@ -685,7 +701,7 @@ kbd {
   align-items: stretch;
   justify-content: flex-start;
   flex: 1 1 auto;
-  min-height: 280px;
+  min-height: 180px;
   overflow: auto;
   padding: 6px;
   background: var(--surface);

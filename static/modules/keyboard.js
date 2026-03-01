@@ -401,6 +401,52 @@ export function createKeyboardModule({
     initGlobalKeydown({ onF1 });
     const vk = initVirtualKeyboard();
     updateMetaLabelRef = vk.updateMetaLabel || (() => {});
+    initResizeSplitter();
+  }
+
+  function initResizeSplitter() {
+    const splitter = document.getElementById('resize-splitter');
+    const terminalWrap = document.getElementById('terminal-wrap');
+    if (!splitter || !terminalWrap) return;
+
+    let isResizing = false;
+    let startY = 0;
+    let startScreenHeight = 0;
+
+    // Load saved heights from localStorage
+    const savedScreenHeight = localStorage.getItem('km_screen_height');
+    const savedKeyboardHeight = localStorage.getItem('km_keyboard_height');
+    if (savedScreenHeight) {
+      terminalWrap.style.setProperty('--screen-height', savedScreenHeight);
+    }
+    if (savedKeyboardHeight) {
+      terminalWrap.style.setProperty('--keyboard-height', savedKeyboardHeight);
+    }
+
+    splitter.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startY = e.clientY;
+      const styles = window.getComputedStyle(terminalWrap);
+      startScreenHeight = parseInt(styles.getPropertyValue('--screen-height') || '200px');
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      splitter.style.opacity = '1';
+    });
+
+    function handleMouseMove(e) {
+      if (!isResizing) return;
+      const deltaY = e.clientY - startY;
+      const newScreenHeight = Math.max(180, Math.min(startScreenHeight + deltaY, window.innerHeight - 300));
+      terminalWrap.style.setProperty('--screen-height', newScreenHeight + 'px');
+      localStorage.setItem('km_screen_height', newScreenHeight + 'px');
+    }
+
+    function handleMouseUp() {
+      isResizing = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      splitter.style.opacity = '';
+    }
   }
 
   function handleAgentPlatform(newOS) {

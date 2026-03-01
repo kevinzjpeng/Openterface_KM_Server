@@ -33,7 +33,6 @@ export function createScreenshotModule({ getWs, incSent, focusPrimaryInput }) {
   function requestPinnedScreenshot() {
     const ws = getWs && getWs();
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    clearPinnedScreenshot('Retrieving screenshot…');
     if (screenshotOverlay) screenshotOverlay.classList.remove('show');
     ws.send(JSON.stringify({ type: 'screenshot_request' }));
     if (typeof incSent === 'function') incSent();
